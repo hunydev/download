@@ -5,7 +5,7 @@
 
 import { BrowserRouter, Routes, Route, useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
-import { Folder, File, Download, Upload, Lock, ChevronRight, Home, FileText } from 'lucide-react';
+import { Folder, File, Download, Upload, Lock, ChevronRight, Home, FileText, Copy, Check } from 'lucide-react';
 
 function ViewHandler() {
   const { '*': pathParam } = useParams();
@@ -74,6 +74,7 @@ function Explorer() {
   const [uploadPassword, setUploadPassword] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadPath, setUploadPath] = useState(path);
+  const [copiedPath, setCopiedPath] = useState<string | null>(null);
 
   useEffect(() => {
     fetchItems();
@@ -230,19 +231,33 @@ function Explorer() {
                   <div className="col-span-3 md:col-span-3 flex items-center justify-end space-x-4 text-sm text-gray-500">
                     <span className="hidden md:inline">{new Date(item.updatedAt).toLocaleDateString()}</span>
                     {!item.isDirectory && (
-                      <button
-                        onClick={() => {
-                          if (item.isProtected) {
-                            window.location.href = `/view/${item.path}`;
-                          } else {
-                            window.location.href = `/d/${item.path}`;
-                          }
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md opacity-0 group-hover:opacity-100 transition-all"
-                        title="Download"
-                      >
-                        <Download className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => {
+                            const url = `${window.location.origin}/d/${item.path}`;
+                            navigator.clipboard.writeText(url);
+                            setCopiedPath(item.path);
+                            setTimeout(() => setCopiedPath(null), 2000);
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                          title="Copy download link"
+                        >
+                          {copiedPath === item.path ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (item.isProtected) {
+                              window.location.href = `/view/${item.path}`;
+                            } else {
+                              window.location.href = `/d/${item.path}`;
+                            }
+                          }}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                          title="Download"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
