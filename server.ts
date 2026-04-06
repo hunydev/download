@@ -4,6 +4,7 @@ import multer from 'multer';
 import fs from 'fs-extra';
 import path from 'path';
 import Database from 'better-sqlite3';
+import archiver from 'archiver';
 
 async function startServer() {
   const app = express();
@@ -119,7 +120,16 @@ async function startServer() {
 
       const stat = await fs.stat(fullPath);
       if (stat.isDirectory()) {
-        return res.status(400).send('Cannot download a directory directly');
+        const folderName = path.basename(safePath) || 'download';
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="${folderName}.zip"`);
+
+        const archive = archiver('zip', { zlib: { level: 5 } });
+        archive.on('error', (err) => { throw err; });
+        archive.pipe(res);
+        archive.directory(fullPath, folderName);
+        await archive.finalize();
+        return;
       }
 
       const meta = stmtGet.get(safePath) as any;
