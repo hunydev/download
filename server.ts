@@ -486,6 +486,7 @@ Returns JSON: \`{ "items": [{ "name": "file.txt", "path": "file.txt", "isDirecto
     if (
       req.path.startsWith('/api/') ||
       req.path.startsWith('/d/') ||
+      req.path.startsWith('/view/') ||
       req.path === '/skill.md' ||
       req.path === '/favicon.svg' ||
       req.path === '/login' ||
