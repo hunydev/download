@@ -308,6 +308,7 @@ Returns JSON: \`{ "items": [{ "name": "file.txt", "path": "file.txt", "isDirecto
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Skill Setup Guide - Huny Download</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; color: #1e293b; line-height: 1.6; }
@@ -407,6 +408,7 @@ Returns JSON: \`{ "items": [{ "name": "file.txt", "path": "file.txt", "isDirecto
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login - Huny Download</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
@@ -470,6 +472,7 @@ Returns JSON: \`{ "items": [{ "name": "file.txt", "path": "file.txt", "isDirecto
       req.path.startsWith('/api/') ||
       req.path.startsWith('/d/') ||
       req.path === '/skill.md' ||
+      req.path === '/favicon.svg' ||
       req.path === '/login' ||
       req.path === '/logout'
     ) {
