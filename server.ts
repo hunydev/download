@@ -126,6 +126,20 @@ async function startServer() {
     }
   });
 
+  // Remove empty parent folders up to UPLOADS_DIR
+  async function cleanEmptyParents(filePath: string) {
+    let dir = path.dirname(filePath);
+    while (dir !== UPLOADS_DIR && dir.startsWith(UPLOADS_DIR)) {
+      const entries = await fs.readdir(dir);
+      if (entries.length === 0) {
+        await fs.remove(dir);
+        dir = path.dirname(dir);
+      } else {
+        break;
+      }
+    }
+  }
+
   // API: Delete file/folder
   app.delete('/api/delete', async (req, res) => {
     try {
@@ -141,12 +155,13 @@ async function startServer() {
 
       const stat = await fs.stat(fullPath);
       if (stat.isDirectory()) {
-        // Delete all DB entries under this folder
         db.prepare('DELETE FROM files WHERE path LIKE ? OR path LIKE ?').run(safePath, safePath + '/%');
         await fs.remove(fullPath);
+        await cleanEmptyParents(fullPath);
       } else {
         db.prepare('DELETE FROM files WHERE path = ?').run(safePath);
         await fs.remove(fullPath);
+        await cleanEmptyParents(fullPath);
       }
 
       res.json({ success: true });
