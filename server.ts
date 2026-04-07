@@ -94,6 +94,68 @@ async function startServer() {
     }
   });
 
+  // API: Storage stats
+  app.get('/api/stats', async (req, res) => {
+    try {
+      async function getDirStats(dirPath: string): Promise<{ totalSize: number; fileCount: number; folderCount: number }> {
+        let totalSize = 0, fileCount = 0, folderCount = 0;
+        if (!fs.existsSync(dirPath)) return { totalSize, fileCount, folderCount };
+        const entries = await fs.readdir(dirPath, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.name === 'files.db' || entry.name === 'files.db-wal' || entry.name === 'files.db-shm') continue;
+          const fullPath = path.join(dirPath, entry.name);
+          if (entry.isDirectory()) {
+            folderCount++;
+            const sub = await getDirStats(fullPath);
+            totalSize += sub.totalSize;
+            fileCount += sub.fileCount;
+            folderCount += sub.folderCount;
+          } else {
+            fileCount++;
+            const stat = await fs.stat(fullPath);
+            totalSize += stat.size;
+          }
+        }
+        return { totalSize, fileCount, folderCount };
+      }
+      const stats = await getDirStats(UPLOADS_DIR);
+      res.json(stats);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Failed to get stats' });
+    }
+  });
+
+  // API: Delete file/folder
+  app.delete('/api/delete', async (req, res) => {
+    try {
+      const { path: filePath } = req.body;
+      if (!filePath) return res.status(400).json({ error: 'Path is required' });
+
+      const safePath = path.normalize(filePath).replace(/^(\.\.(\/|\\|$))+/, '').replace(/\\/g, '/');
+      const fullPath = path.join(UPLOADS_DIR, safePath);
+
+      if (!fs.existsSync(fullPath)) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+
+      const stat = await fs.stat(fullPath);
+      if (stat.isDirectory()) {
+        // Delete all DB entries under this folder
+        db.prepare('DELETE FROM files WHERE path LIKE ? OR path LIKE ?').run(safePath, safePath + '/%');
+        await fs.remove(fullPath);
+      } else {
+        db.prepare('DELETE FROM files WHERE path = ?').run(safePath);
+        await fs.remove(fullPath);
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Delete failed' });
+    }
+  });
+
   // API: List files/folders
   app.get('/api/list/*', async (req, res) => {
     try {

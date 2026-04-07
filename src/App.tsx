@@ -5,7 +5,7 @@
 
 import { BrowserRouter, Routes, Route, useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
-import { Folder, File, Download, Upload, Lock, ChevronRight, Home, FileText, Copy, Check } from 'lucide-react';
+import { Folder, File, Download, Upload, Lock, ChevronRight, Home, FileText, Copy, Check, LogOut, HardDrive, Trash2 } from 'lucide-react';
 
 function ViewHandler() {
   const { '*': pathParam } = useParams();
@@ -75,11 +75,23 @@ function Explorer() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadPath, setUploadPath] = useState(path);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const [stats, setStats] = useState<{ totalSize: number; fileCount: number; folderCount: number } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchItems();
+    fetchStats();
     setUploadPath(path);
   }, [path]);
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/stats');
+      const data = await res.json();
+      setStats(data);
+    } catch (e) { /* ignore */ }
+  };
 
   const fetchItems = async () => {
     setLoading(true);
@@ -128,6 +140,7 @@ function Explorer() {
         setUploadPassword('');
         if (fileInputRef.current) fileInputRef.current.value = '';
         fetchItems();
+        fetchStats();
       } else {
         alert('Upload failed');
       }
@@ -136,6 +149,29 @@ function Explorer() {
       alert('Upload failed');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: deleteTarget.path }),
+      });
+      if (res.ok) {
+        setDeleteTarget(null);
+        fetchItems();
+        fetchStats();
+      } else {
+        alert('삭제 실패');
+      }
+    } catch (e) {
+      alert('삭제 실패');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -168,10 +204,20 @@ function Explorer() {
             );
           })}
         </div>
-        <div className="flex items-center space-x-4">
-          <a href="/skill.md" target="_blank" className="text-sm text-gray-500 hover:text-gray-900 flex items-center space-x-1">
+        <div className="flex items-center space-x-3">
+          {stats && (
+            <div className="hidden md:flex items-center space-x-1.5 text-sm text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg">
+              <HardDrive className="w-3.5 h-3.5" />
+              <span>{formatSize(stats.totalSize)}</span>
+              <span className="text-gray-300">·</span>
+              <span>{stats.fileCount} files</span>
+              <span className="text-gray-300">·</span>
+              <span>{stats.folderCount} folders</span>
+            </div>
+          )}
+          <a href="/guide" className="text-sm text-gray-500 hover:text-gray-900 flex items-center space-x-1">
             <FileText className="w-4 h-4" />
-            <span>AI Skill</span>
+            <span className="hidden sm:inline">Guide</span>
           </a>
           <button
             onClick={() => setShowUploadModal(true)}
@@ -180,6 +226,13 @@ function Explorer() {
             <Upload className="w-4 h-4" />
             <span>Upload</span>
           </button>
+          <a
+            href="/logout"
+            className="flex items-center space-x-1 text-sm text-gray-400 hover:text-red-500 transition-colors p-2 rounded-md hover:bg-red-50"
+            title="로그아웃"
+          >
+            <LogOut className="w-4 h-4" />
+          </a>
         </div>
       </header>
 
@@ -257,6 +310,13 @@ function Explorer() {
                         >
                           <Download className="w-4 h-4" />
                         </button>
+                        <button
+                          onClick={() => setDeleteTarget(item)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                          title="삭제"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     )}
                   </div>
@@ -268,8 +328,8 @@ function Explorer() {
       </main>
 
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setShowUploadModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-xl font-bold mb-4">Upload File</h2>
             <form onSubmit={handleUpload} className="space-y-4">
               <div>
@@ -291,6 +351,11 @@ function Explorer() {
                   placeholder="e.g. documents/reports"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
+                {uploadPath && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    저장 위치: <code className="bg-gray-100 px-1 rounded">{uploadPath}/</code> → 다운로드: <code className="bg-gray-100 px-1 rounded">{window.location.origin}/d/{uploadPath}/파일명</code>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -321,6 +386,45 @@ function Explorer() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-center mb-4">
+              <div className="bg-red-50 p-3 rounded-full">
+                <Trash2 className="w-6 h-6 text-red-500" />
+              </div>
+            </div>
+            <h2 className="text-lg font-bold text-center mb-2">삭제 확인</h2>
+            <p className="text-gray-500 text-center text-sm mb-1">
+              {deleteTarget.isDirectory ? '폴더' : '파일'}을 삭제하시겠습니까?
+            </p>
+            <p className="text-center text-sm font-mono bg-gray-50 p-2 rounded-md mb-4 break-all">
+              {deleteTarget.path}
+            </p>
+            {deleteTarget.isDirectory && (
+              <p className="text-red-500 text-xs text-center mb-4">
+                폴더 내 모든 파일이 함께 삭제됩니다
+              </p>
+            )}
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {deleting ? '삭제 중...' : '삭제'}
+              </button>
+            </div>
           </div>
         </div>
       )}
