@@ -5,6 +5,8 @@ import fs from 'fs-extra';
 import path from 'path';
 import Database from 'better-sqlite3';
 import archiver from 'archiver';
+import crypto from 'crypto';
+import cookieParser from 'cookie-parser';
 
 async function startServer() {
   const app = express();
@@ -25,6 +27,35 @@ async function startServer() {
       updated_at INTEGER
     )
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `);
+
+  // Web password setup
+  const getSetting = db.prepare('SELECT value FROM settings WHERE key = ?');
+  const setSetting = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
+
+  let webPassword = process.env.WEB_PASSWORD || (getSetting.get('web_password') as any)?.value;
+  if (!webPassword) {
+    webPassword = crypto.randomBytes(8).toString('hex');
+    setSetting.run('web_password', webPassword);
+    console.log(`\n  ⚠️  Generated web password: ${webPassword}`);
+    console.log(`  Set WEB_PASSWORD env var or it will be read from DB.\n`);
+  }
+
+  const COOKIE_SECRET = crypto.randomBytes(32).toString('hex');
+  const SESSION_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+  function createAuthToken() {
+    return crypto.createHmac('sha256', COOKIE_SECRET).update('authenticated').digest('hex');
+  }
+
+  function verifyAuthToken(token: string) {
+    return token === createAuthToken();
+  }
 
   const stmtGet = db.prepare('SELECT * FROM files WHERE path = ?');
   const stmtUpsert = db.prepare(`
@@ -38,6 +69,7 @@ async function startServer() {
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  app.use(cookieParser());
 
   // API: Upload
   app.post('/api/upload', upload.single('file'), async (req, res) => {
@@ -301,6 +333,98 @@ Returns JSON: \`{ "items": [{ "name": "file.txt", "path": "file.txt", "isDirecto
 </html>`;
       res.setHeader('Content-Type', 'text/html');
       res.send(html);
+  });
+
+  // Login page
+  app.get('/login', (req, res) => {
+    const error = req.query.error === '1';
+    const redirect = req.query.redirect || '/';
+    const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Huny Download</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: #fff; padding: 2.5rem; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); width: 100%; max-width: 380px; }
+    .icon { width: 48px; height: 48px; background: #eff6ff; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; }
+    .icon svg { width: 24px; height: 24px; color: #3b82f6; }
+    h1 { text-align: center; font-size: 1.5rem; color: #1e293b; margin-bottom: 0.5rem; }
+    .sub { text-align: center; color: #64748b; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .error { background: #fef2f2; color: #dc2626; padding: 0.75rem; border-radius: 8px; font-size: 0.85rem; text-align: center; margin-bottom: 1rem; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; color: #475569; margin-bottom: 0.4rem; }
+    input { width: 100%; padding: 0.7rem 1rem; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 1rem; outline: none; transition: border 0.2s; }
+    input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    button { width: 100%; padding: 0.75rem; background: #3b82f6; color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 1rem; transition: background 0.2s; }
+    button:hover { background: #2563eb; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg></div>
+    <h1>Login</h1>
+    <p class="sub">Web 파일 탐색기를 사용하려면 로그인하세요</p>
+    ${error ? '<div class="error">비밀번호가 올바르지 않습니다</div>' : ''}
+    <form method="POST" action="/login">
+      <input type="hidden" name="redirect" value="${redirect}" />
+      <label>Password</label>
+      <input type="password" name="password" placeholder="비밀번호 입력" autofocus required />
+      <button type="submit">로그인</button>
+    </form>
+  </div>
+</body>
+</html>`;
+    res.send(html);
+  });
+
+  // Login handler
+  app.post('/login', (req, res) => {
+    const { password, redirect } = req.body;
+    if (password === webPassword) {
+      res.cookie('auth_token', createAuthToken(), {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        maxAge: SESSION_MAX_AGE,
+      });
+      return res.redirect(redirect || '/');
+    }
+    const redirectParam = redirect ? `&redirect=${encodeURIComponent(redirect)}` : '';
+    res.redirect(`/login?error=1${redirectParam}`);
+  });
+
+  // Logout handler
+  app.get('/logout', (req, res) => {
+    res.clearCookie('auth_token');
+    res.redirect('/login');
+  });
+
+  // Auth middleware for web views (skip API, download, skill.md, login)
+  app.use((req, res, next) => {
+    // Public routes: API, downloads, skill.md, login, static assets
+    if (
+      req.path.startsWith('/api/') ||
+      req.path.startsWith('/d/') ||
+      req.path === '/skill.md' ||
+      req.path === '/login' ||
+      req.path === '/logout'
+    ) {
+      return next();
+    }
+
+    const token = req.cookies?.auth_token;
+    if (token && verifyAuthToken(token)) {
+      return next();
+    }
+
+    // For HTML requests, redirect to login
+    if (req.accepts('html')) {
+      return res.redirect(`/login?redirect=${encodeURIComponent(req.originalUrl)}`);
+    }
+
+    res.status(401).json({ error: 'Authentication required' });
   });
 
   // Vite middleware for development
