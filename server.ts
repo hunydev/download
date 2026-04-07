@@ -335,7 +335,7 @@ Returns JSON: \`{ "items": [{ "name": "file.txt", "path": "file.txt", "isDirecto
     .card h2 .num { background: #3b82f6; color: #fff; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.85rem; flex-shrink: 0; }
     .card p { color: #475569; margin-bottom: 0.75rem; }
     pre { background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.9rem; position: relative; }
-    pre code { font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; }
+    pre code { font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; background: transparent; color: inherit; padding: 0; }
     .copy-btn { position: absolute; top: 0.5rem; right: 0.5rem; background: #334155; color: #94a3b8; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
     .copy-btn:hover { background: #475569; color: #fff; }
     .tag { display: inline-block; background: #eff6ff; color: #2563eb; padding: 2px 10px; border-radius: 12px; font-size: 0.85rem; font-weight: 500; }
